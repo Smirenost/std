@@ -209,6 +209,22 @@ def _get_template_engine(ctx):
     return env
 
 
+def _extend_path(ctx: Context, path: str):
+    current_module_prefix = "." + os.path.sep
+    if path.startswith(current_module_prefix):
+        module_and_submodule_name_parts = ctx.owner.namespace.get_full_name().split(
+            "::"
+        )
+        module_name = module_and_submodule_name_parts[0]
+        if module_name in Project.get().modules.keys():
+            return os.path.join(module_name, path[len(current_module_prefix) :])
+        else:
+            raise Exception(
+                f"Unable to determine current module for path {path}, called from {ctx.owner.namespace.get_full_name()}"
+            )
+    return path
+
+
 @plugin("template")
 def template(ctx: Context, path: "string"):
     """
@@ -216,12 +232,12 @@ def template(ctx: Context, path: "string"):
         generate a new statement that has dependencies on the used variables.
     """
     jinja_env = _get_template_engine(ctx)
-
-    if path in tcache:
-        template = tcache[path]
+    template_path = _extend_path(ctx, path)
+    if template_path in tcache:
+        template = tcache[template_path]
     else:
-        template = jinja_env.get_template(path)
-        tcache[path] = template
+        template = jinja_env.get_template(template_path)
+        tcache[template_path] = template
 
     resolver = ctx.get_resolver()
 
@@ -528,6 +544,7 @@ def determine_path(ctx, module_dir, path):
     """
         Determine the real path based on the given path
     """
+    path = _extend_path(ctx, path)
     parts = path.split(os.path.sep)
 
     modules = Project.get().modules
